@@ -6,7 +6,7 @@ use Carp ();
 use DBI;
 use Teng::Iterator;
 
-our @EXPORT = qw/search_with_pager/;
+our @EXPORT = qw/search_with_pager search_by_sql_with_pager/;
 
 sub search_with_pager {
     my ($self, $table_name, $where, $opt) = @_;
@@ -41,6 +41,33 @@ sub search_with_pager {
         table_name       => $table_name,
         suppress_object_creation => $self->suppress_row_objects,
     )->all];
+
+    my $has_next = ( $rows + 1 == scalar(@$ret) ) ? 1 : 0;
+    if ($has_next) { pop @$ret }
+
+    my $pager = Teng::Plugin::Pager::Page->new(
+        entries_per_page     => $rows,
+        current_page         => $page,
+        has_next             => $has_next,
+        entries_on_this_page => scalar(@$ret),
+    );
+
+    return ($ret, $pager);
+}
+
+sub search_by_sql_with_pager {
+    my $self = shift;
+    my $sql = shift;
+    my $opt = pop;
+
+    my $page = $opt->{page};
+    my $rows = $opt->{rows};
+    for (qw/page rows/) {
+        Carp::croak("missing mandatory parameter: $_") unless exists $opt->{$_};
+    }
+
+    $sql .= sprintf ' LIMIT %d OFFSET %d', $rows + 1, $rows*($page-1);
+    my $ret = [ $self->search_by_sql($sql, @_) ];
 
     my $has_next = ( $rows + 1 == scalar(@$ret) ) ? 1 : 0;
     if ($has_next) { pop @$ret }
